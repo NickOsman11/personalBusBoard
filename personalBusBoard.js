@@ -20,58 +20,42 @@ async function fetchDataWithUrl(url){
 }
 
 
-async function getBusDataWithStopCode(stopCode){
-
-    let url = `https://api.tfl.gov.uk/StopPoint/${stopCode}/Arrivals`;
-    let busData = await fetchDataWithUrl(url);
-    return busData;
-}
-
-
-async function returnArrivalsWithBusData(busData){
-
-    busData.sort((a, b) => a.timeToStation - b.timeToStation);
-    let arrivals = busData.map(x => ({["lineName"] : x.lineName, ["timeToStation"] : x.timeToStation}));
-    return arrivals
-}
-
-
 async function showBusArrivalsWithStopCode(stopCode, stopName){
 
-    let busData = await getBusDataWithStopCode(stopCode);
-    let arrivals = await returnArrivalsWithBusData(busData);
+    let busData = await fetchDataWithUrl(`https://api.tfl.gov.uk/StopPoint/${stopCode}/Arrivals`);
+    let arrivals = busData.sort((a, b) => a.timeToStation - b.timeToStation);
     console.log(`${stopName}: `)
     if (arrivals.length === 0){
         console.log("There are no busses due")
     }
-    arrivals.forEach(bus => console.log(`${bus.lineName} : ${(Math.floor(bus.timeToStation / 60) > 0 ? String(Math.floor(bus.timeToStation / 60)) + " minutes" : "Due")}`));   
+    else{
+        arrivals.forEach(bus => console.log(`${bus.lineName} : ` + 
+                            `${(Math.floor(bus.timeToStation / 60) > 0 ? String(Math.floor(bus.timeToStation / 60)) + " minutes" : "Due")}`));   
+    }
 }
 
-
-async function getStopDataWithPostcode(postcode, radius, numberOfStopsToReturn) {
+async function getClosestStopsWithPostcode(postcode, radius, numberOfStopsToReturn) {
 
     let postcodeData = await (fetchDataWithUrl(`https://api.postcodes.io/postcodes/${postcode}`).then(x => x.result))
     let lat = postcodeData.latitude; let long = postcodeData.longitude;
-    let closestStopPoints
+    let closestStopPoints = []
 
-    while (true){
+    while (closestStopPoints.length < numberOfStopsToReturn){
 
         let stopPointsData = await fetchDataWithUrl(
-            `https://api.tfl.gov.uk/StopPoint/?lat=${lat}&lon=${long}&stopTypes=NaptanPublicBusCoachTram&radius=${radius}`)
-                                                .then(x => x.stopPoints)
+            `https://api.tfl.gov.uk/StopPoint/?lat=${lat}&lon=${long}` 
+            + `&stopTypes=NaptanPublicBusCoachTram&radius=${radius}`)
+                                .then(x => x.stopPoints)
 
-        closestStopPoints = await stopPointsData.sort((a, b) => a.distance - b.distance)
-        
+        closestStopPoints = await stopPointsData.sort((a, b) => a.distance - b.distance)        
         if (closestStopPoints.length < numberOfStopsToReturn){
 
-            radius = getIntWithPrompt(`There are fewer than ${numberOfStopsToReturn} stop points`
+            radius = getIntWithPrompt(`There are fewer than ${numberOfStopsToReturn} stops `
                         + `within the specified radius. Enter a radius greater than `
                         + `${radius}:`)
-
         }
-        break
     }
-    return closestStopPoints.slice(0, numberOfStopsToReturn)
+    return closestStopPoints.slice(0, numberOfStopsToReturn)   
 }
 
 
@@ -92,16 +76,16 @@ async function getPostcode(){
 }
 
 
-async function showBussesNearMe(){
+async function showBussesNearPostcode(){
     
     let postcode = await getPostcode()
     let radius = getIntWithPrompt("Enter a maximum distance to bus stop: ")
     let numberOfStopsToDisplay = getIntWithPrompt("How many stops would you like to display? ")
-    let stopsData = await getStopDataWithPostcode(postcode, radius, numberOfStopsToDisplay)
+    let stopsData = await getClosestStopsWithPostcode(postcode, radius, numberOfStopsToDisplay)
+    stopsData.forEach(stop => console.log(stop.id, stop.commonName))    
     stopsData.forEach(stop => showBusArrivalsWithStopCode(stop.id, stop.commonName))
 
 
-    
 }
 
-showBussesNearMe()
+showBussesNearPostcode()
